@@ -34,6 +34,12 @@ cleanup() {
   echo "=== Running unmount cleanup ==="
   sync
   set +e
+  if [[ -f "${MNT_DIR}/usr/bin/iptables.orig" ]]; then
+    mv -f "${MNT_DIR}/usr/bin/iptables.orig" "${MNT_DIR}/usr/bin/iptables"
+  fi
+  if [[ -f "${MNT_DIR}/usr/bin/ip6tables.orig" ]]; then
+    mv -f "${MNT_DIR}/usr/bin/ip6tables.orig" "${MNT_DIR}/usr/bin/ip6tables"
+  fi
   if mountpoint -q "${MNT_DIR}/boot" 2>/dev/null; then umount -f "${MNT_DIR}/boot"; fi
   if mountpoint -q "${MNT_DIR}/home" 2>/dev/null; then umount -f "${MNT_DIR}/home"; fi
   if mountpoint -q "${MNT_DIR}/.snapshots" 2>/dev/null; then umount -f "${MNT_DIR}/.snapshots"; fi
@@ -62,7 +68,7 @@ mount -t btrfs -o subvol=@home,compress=zstd:3,noatime,discard=async "${LOOP_DEV
 mount -t btrfs -o subvol=@snapshots,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${MNT_DIR}/.snapshots"
 mount -t btrfs -o subvol=@var_log,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${MNT_DIR}/var/log"
 mount -t btrfs -o subvol=@pkg,noatime,nodatacow "${LOOP_DEV}p2" "${MNT_DIR}/var/cache/pacman/pkg"
-mount -t vfat "${LOOP_DEV}p1" "${MNT_DIR}/boot"
+mount -t ext4 "${LOOP_DEV}p1" "${MNT_DIR}/boot"
 
 # 2. Configure QEMU binfmt and pacman sandbox settings
 echo "[2/8] Setting up binfmt and pacman sandbox overrides..."
@@ -70,9 +76,10 @@ if [[ -f /etc/binfmt.d/qemu-aarch64-static.conf ]]; then
   systemctl restart systemd-binfmt 2>/dev/null || true
 fi
 
-# Disable pacman sandboxing for user-mode chroot
+# Disable pacman sandboxing and space checking for user-mode chroot
 sed -i '/DisableSandboxFilesystem/d' "${MNT_DIR}/etc/pacman.conf"
 sed -i '/DisableSandboxSyscalls/d' "${MNT_DIR}/etc/pacman.conf"
+sed -i '/CheckSpace/d' "${MNT_DIR}/etc/pacman.conf"
 sed -i '/\[options\]/a DisableSandboxFilesystem\nDisableSandboxSyscalls' "${MNT_DIR}/etc/pacman.conf"
 
 # Setup temporary DNS
@@ -81,17 +88,25 @@ echo "nameserver 1.1.1.1" > "${MNT_DIR}/etc/resolv.conf"
 echo "nameserver 8.8.8.8" >> "${MNT_DIR}/etc/resolv.conf"
 
 # 3. Keyring & Base build tools
-echo "[3/8] Initializing keyring and base packages..."
+echo "[3/8] Initializing keyring, locales, and base packages..."
+echo "en_US.UTF-8 UTF-8" > "${MNT_DIR}/etc/locale.gen"
+arch-chroot "${MNT_DIR}" locale-gen || true
+echo "LANG=en_US.UTF-8" > "${MNT_DIR}/etc/locale.conf"
+
 arch-chroot "${MNT_DIR}" pacman-key --init
 arch-chroot "${MNT_DIR}" pacman-key --populate archlinuxarm
-arch-chroot "${MNT_DIR}" pacman -Sy --noconfirm --needed --overwrite '*' base-devel git sudo btrfs-progs
+arch-chroot "${MNT_DIR}" pacman -Sy --noconfirm --needed --overwrite '*' base-devel git go sudo btrfs-progs
 
 # 4. User and sudo setup
 echo "[4/8] Configuring alarm user and yay non-interactive setup..."
-if ! id -u -R "${MNT_DIR}" alarm &>/dev/null; then
-  arch-chroot "${MNT_DIR}" useradd -m -G wheel,video,render,audio,input,seat,storage -s /bin/bash alarm
+for grp in wheel video render audio input seat storage docker; do
+  arch-chroot "${MNT_DIR}" groupadd -f "$grp"
+done
+
+if ! grep -q "^alarm:" "${MNT_DIR}/etc/passwd"; then
+  arch-chroot "${MNT_DIR}" useradd -m -G wheel,video,render,audio,input,seat,storage,docker -s /bin/bash alarm
 else
-  arch-chroot "${MNT_DIR}" usermod -aG wheel,video,render,audio,input,seat,storage alarm
+  arch-chroot "${MNT_DIR}" usermod -aG wheel,video,render,audio,input,seat,storage,docker alarm
 fi
 echo "alarm:alarm" | arch-chroot "${MNT_DIR}" chpasswd
 echo "root:root" | arch-chroot "${MNT_DIR}" chpasswd
@@ -106,34 +121,50 @@ fi
 chown -R 1000:1000 "${MNT_DIR}/home/alarm"
 
 # 5. Install yay if not present
-if ! arch-chroot "${MNT_DIR}" which yay &>/dev/null; then
+if ! arch-chroot "${MNT_DIR}" command -v yay &>/dev/null; then
   echo "Building and installing yay from source..."
-  arch-chroot "${MNT_DIR}" su - alarm -c "git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin 2>/dev/null || git clone https://aur.archlinux.org/yay.git /tmp/yay"
-  if [[ -d "${MNT_DIR}/tmp/yay-bin" ]]; then
-    arch-chroot "${MNT_DIR}" su - alarm -c "cd /tmp/yay-bin && makepkg -si --noconfirm"
-  else
-    arch-chroot "${MNT_DIR}" su - alarm -c "cd /tmp/yay && makepkg -si --noconfirm"
-  fi
-  rm -rf "${MNT_DIR}/tmp/yay"*
+  rm -rf "${MNT_DIR}/tmp/yay"
+  arch-chroot "${MNT_DIR}" su - alarm -c "git clone --depth 1 https://aur.archlinux.org/yay.git /tmp/yay && cd /tmp/yay && makepkg -si --noconfirm"
+  rm -rf "${MNT_DIR}/tmp/yay"
 fi
 
-# 6. Deploy Omarchy ARM
-echo "[5/8] Deploying Omarchy arm64 repository..."
-mkdir -p "${MNT_DIR}/usr/share/omarchy"
+# Wrap iptables and ip6tables for QEMU chroot execution
+if [[ ! -f "${MNT_DIR}/usr/bin/iptables.orig" && -f "${MNT_DIR}/usr/bin/iptables" ]]; then
+  mv "${MNT_DIR}/usr/bin/iptables" "${MNT_DIR}/usr/bin/iptables.orig"
+  cat <<'EOF' > "${MNT_DIR}/usr/bin/iptables"
+#!/bin/bash
+if [[ "$*" =~ (-V|--version) ]]; then
+  echo "iptables v1.8.13 (nf_tables)"
+  exit 0
+fi
+exec -a iptables /usr/bin/iptables.orig "$@"
+EOF
+  chmod +x "${MNT_DIR}/usr/bin/iptables"
+fi
+
+if [[ ! -f "${MNT_DIR}/usr/bin/ip6tables.orig" && -f "${MNT_DIR}/usr/bin/ip6tables" ]]; then
+  mv "${MNT_DIR}/usr/bin/ip6tables" "${MNT_DIR}/usr/bin/ip6tables.orig"
+  cat <<'EOF' > "${MNT_DIR}/usr/bin/ip6tables"
+#!/bin/bash
+if [[ "$*" =~ (-V|--version) ]]; then
+  echo "ip6tables v1.8.13 (nf_tables)"
+  exit 0
+fi
+exec -a ip6tables /usr/bin/ip6tables.orig "$@"
+EOF
+  chmod +x "${MNT_DIR}/usr/bin/ip6tables"
+fi
+
+# 6. Deploy and execute Omarchy ARM installer
+echo "[6/8] Deploying Omarchy arm64 repository and executing installer..."
+mkdir -p "${MNT_DIR}/home/alarm/omarchy-arm"
 if [[ -d "/home/gmb0yd911/Work/omarchy-arm" ]]; then
-  rsync -a --exclude='.git' /home/gmb0yd911/Work/omarchy-arm/ "${MNT_DIR}/usr/share/omarchy/"
+  rsync -a --exclude='.git' /home/gmb0yd911/Work/omarchy-arm/ "${MNT_DIR}/home/alarm/omarchy-arm/"
 fi
+arch-chroot "${MNT_DIR}" chown -R alarm:alarm /home/alarm/omarchy-arm
 
-# Link all commands
-for cmd in "${MNT_DIR}"/usr/share/omarchy/bin/*; do
-  cmd_name="$(basename "$cmd")"
-  ln -sf "/usr/share/omarchy/bin/${cmd_name}" "${MNT_DIR}/usr/bin/${cmd_name}"
-done
-
-echo "[6/8] Executing Omarchy settings, system, and user provisioning..."
-arch-chroot "${MNT_DIR}" bash /usr/share/omarchy/install/arm/settings.sh
-arch-chroot "${MNT_DIR}" omarchy-apply-system --install-user alarm --first-install
-arch-chroot "${MNT_DIR}" su - alarm -c "omarchy-provision-user --force"
+echo "Running Omarchy ARM installer inside chroot (resolving packages, system, and user setup)..."
+arch-chroot "${MNT_DIR}" su - alarm -c "cd /home/alarm/omarchy-arm && ./install.sh -y"
 
 # Ensure SDDM autologin, state, and wayland session symlink
 install -d -m 0755 "${MNT_DIR}/var/lib/sddm"
@@ -209,6 +240,12 @@ fi
 
 # 8. Cleanup and restore
 echo "[8/8] Cleaning package caches and restoring DNS stub..."
+if [[ -f "${MNT_DIR}/usr/bin/iptables.orig" ]]; then
+  mv -f "${MNT_DIR}/usr/bin/iptables.orig" "${MNT_DIR}/usr/bin/iptables"
+fi
+if [[ -f "${MNT_DIR}/usr/bin/ip6tables.orig" ]]; then
+  mv -f "${MNT_DIR}/usr/bin/ip6tables.orig" "${MNT_DIR}/usr/bin/ip6tables"
+fi
 arch-chroot "${MNT_DIR}" pacman -Scc --noconfirm || true
 rm -rf "${MNT_DIR}/home/alarm/.cache/yay/*" "${MNT_DIR}/home/alarm/.cargo" 2>/dev/null || true
 rm -f "${MNT_DIR}/etc/resolv.conf"

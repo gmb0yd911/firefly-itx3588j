@@ -11,7 +11,7 @@ CACHE_DIR="${WORK_DIR}/cache"
 CONFIG_DIR="${WORK_DIR}/config"
 BSP_DIR="${CACHE_DIR}/firefly-bsp"
 IMG_FILE="${WORK_DIR}/archlinuxarm-firefly-itx3588j-btrfs.img"
-IMG_SIZE_MIB="${IMG_SIZE_MIB:-6144}"
+IMG_SIZE_MIB="${IMG_SIZE_MIB:-12288}"
 BOOT_SIZE_MIB=512
 
 TARGET_DIR="/mnt/firefly_target_$$"
@@ -57,7 +57,7 @@ cleanup() {
 trap cleanup EXIT
 
 # 1. Verify dependencies
-for cmd in parted losetup mkfs.vfat mkfs.btrfs tar rsync; do
+for cmd in parted losetup mkfs.ext4 mkfs.btrfs tar rsync; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required command '$cmd' is not installed." >&2
     exit 1
@@ -85,14 +85,13 @@ truncate -s "${IMG_SIZE_MIB}M" "${IMG_FILE}"
 
 # 5. Partition disk image for Rockchip RK3588 (GPT)
 # Sectors 0-32767 (first 16 MiB) reserved for U-Boot (idbloader.img @ 64, u-boot.itb @ 16384)
-# Partition 1: 512 MiB FAT32 /boot (starts at 16 MiB / sector 32768)
+# Partition 1: 512 MiB ext4 /boot (starts at 16 MiB / sector 32768)
 # Partition 2: remainder Btrfs root
 echo "[2/7] Partitioning disk image with GPT..."
 parted -s "${IMG_FILE}" mklabel gpt
-parted -s "${IMG_FILE}" mkpart primary fat32 16MiB "$((16 + BOOT_SIZE_MIB))MiB"
+parted -s "${IMG_FILE}" mkpart primary ext4 16MiB "$((16 + BOOT_SIZE_MIB))MiB"
 parted -s "${IMG_FILE}" name 1 "BOOT"
 parted -s "${IMG_FILE}" set 1 boot on
-parted -s "${IMG_FILE}" set 1 esp on
 parted -s "${IMG_FILE}" mkpart primary btrfs "$((16 + BOOT_SIZE_MIB))MiB" 100%
 parted -s "${IMG_FILE}" name 2 "ROOT"
 
@@ -112,8 +111,8 @@ dd if="${BSP_DIR}/u-boot/idbloader.img" of="${LOOP_DEV}" seek=64 conv=notrunc st
 dd if="${BSP_DIR}/u-boot/u-boot.itb" of="${LOOP_DEV}" seek=16384 conv=notrunc status=none
 
 # 6. Format filesystems
-echo "[5/7] Formatting filesystems (FAT32 for boot, Btrfs for root)..."
-mkfs.vfat -F 32 -n "BOOT" "${LOOP_DEV}p1"
+echo "[5/7] Formatting filesystems (ext4 for boot, Btrfs for root)..."
+mkfs.ext4 -F -L "BOOT" "${LOOP_DEV}p1"
 mkfs.btrfs -f -L "ROOT" "${LOOP_DEV}p2"
 
 # Retrieve UUIDs
@@ -142,7 +141,7 @@ mount -t btrfs -o subvol=@home,compress=zstd:3,noatime,discard=async "${LOOP_DEV
 mount -t btrfs -o subvol=@snapshots,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${TARGET_DIR}/.snapshots"
 mount -t btrfs -o subvol=@var_log,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${TARGET_DIR}/var/log"
 mount -t btrfs -o subvol=@pkg,noatime,nodatacow "${LOOP_DEV}p2" "${TARGET_DIR}/var/cache/pacman/pkg"
-mount -t vfat "${LOOP_DEV}p1" "${TARGET_DIR}/boot"
+mount -t ext4 "${LOOP_DEV}p1" "${TARGET_DIR}/boot"
 
 # 7. Extract Arch Linux ARM rootfs
 echo "[6/7] Extracting Arch Linux ARM root filesystem..."
@@ -152,7 +151,7 @@ tar -xpf "${ROOTFS_TAR}" -C "${TARGET_DIR}"
 echo "[7/7] Installing Firefly ITX-3588J BSP and kernel..."
 mkdir -p "${TARGET_DIR}/boot" "${TARGET_DIR}/lib/modules" "${TARGET_DIR}/lib/firmware"
 
-# Copy boot assets
+# Copy boot assets (symlinks, DTB, boot scripts, kernel)
 rsync -a "${BSP_DIR}/boot/" "${TARGET_DIR}/boot/"
 
 # Ensure Image and uInitrd symlinks/files are valid
@@ -196,7 +195,7 @@ rsync -a "${BSP_DIR}/firmware/" "${TARGET_DIR}/lib/firmware/"
 # Configure /etc/fstab
 cat <<EOF > "${TARGET_DIR}/etc/fstab"
 # <file system> <mount point> <type> <options> <dump> <pass>
-UUID=${BOOT_UUID}  /boot                   vfat   defaults,noatime                                    0 2
+UUID=${BOOT_UUID}  /boot                   ext4   defaults,noatime                                    0 2
 UUID=${ROOT_UUID}  /                       btrfs  subvol=@,compress=zstd:3,noatime,discard=async       0 0
 UUID=${ROOT_UUID}  /home                   btrfs  subvol=@home,compress=zstd:3,noatime,discard=async   0 0
 UUID=${ROOT_UUID}  /.snapshots             btrfs  subvol=@snapshots,compress=zstd:3,noatime,discard=async 0 0

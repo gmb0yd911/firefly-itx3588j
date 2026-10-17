@@ -39,7 +39,39 @@ if [[ "${MODE}" == "flash-image" ]]; then
     cat "${IMG_FILE}" | ssh "${SSH_TARGET}" "sudo dd of=${TARGET_DRIVE} bs=4M status=progress conv=fsync"
   fi
 
-  echo "Flash completed successfully!"
+  echo "Synchronizing partition table and expanding to fill disk..."
+  ssh "${SSH_TARGET}" bash <<REMOTEFRESH
+    set -e
+    # Fix secondary GPT header location at end of physical disk
+    sudo sgdisk -e "${TARGET_DRIVE}" || true
+    # Inform kernel of partition changes
+    sudo partprobe "${TARGET_DRIVE}" || true
+    sleep 1
+
+    # Resize partition 2 to use 100% of drive
+    sudo parted -s "${TARGET_DRIVE}" resizepart 2 100%
+    sudo partprobe "${TARGET_DRIVE}" || true
+    sleep 1
+
+    # Determine partition device name (sda2 or sda-part2)
+    PART2="${TARGET_DRIVE}2"
+    if [[ ! -b "\${PART2}" ]]; then
+      PART2="${TARGET_DRIVE}p2"
+    fi
+
+    # Mount Btrfs and expand filesystem to match new partition size
+    TMP_MNT=\$(mktemp -d)
+    sudo mount -t btrfs -o subvol=@ "\${PART2}" "\${TMP_MNT}"
+    sudo btrfs filesystem resize max "\${TMP_MNT}"
+    sudo btrfs filesystem df "\${TMP_MNT}"
+    sudo umount "\${TMP_MNT}"
+    rmdir "\${TMP_MNT}"
+
+    echo "=== Current Disk Layout on ${TARGET_DRIVE} ==="
+    sudo parted -s "${TARGET_DRIVE}" print
+REMOTEFRESH
+
+  echo "Flash and filesystem expansion completed successfully!"
   echo "Reboot the Firefly board to boot into the new Omarchy installation."
 
 elif [[ "${MODE}" == "live-ssd" ]]; then

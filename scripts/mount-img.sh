@@ -34,7 +34,7 @@ mount -t btrfs -o subvol=@home,compress=zstd:3,noatime,discard=async "${LOOP_DEV
 mount -t btrfs -o subvol=@snapshots,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${MNT_DIR}/.snapshots"
 mount -t btrfs -o subvol=@var_log,compress=zstd:3,noatime,discard=async "${LOOP_DEV}p2" "${MNT_DIR}/var/log"
 mount -t btrfs -o subvol=@pkg,noatime,nodatacow "${LOOP_DEV}p2" "${MNT_DIR}/var/cache/pacman/pkg"
-mount -t vfat "${LOOP_DEV}p1" "${MNT_DIR}/boot"
+mount -t ext4 "${LOOP_DEV}p1" "${MNT_DIR}/boot"
 
 echo "Mounted successfully at ${MNT_DIR}."
 echo "To enter chroot: sudo ./scripts/chroot-img.sh"

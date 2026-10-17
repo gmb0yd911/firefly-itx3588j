@@ -1,0 +1,13 @@
+*.img
+*.img.zst
+*.img.sha256
+*.img.zst.sha256
+output/
+cache/ArchLinuxARM*
+cache/firefly-bsp/modules/
+cache/firefly-bsp/boot/vmlinuz*
+cache/firefly-bsp/boot/initrd*
+cache/firefly-bsp/boot/uInitrd*
+cache/firefly-bsp/boot/System.map*
+cache/firefly-bsp/boot/Image
+cache/firefly-bsp/firmware/

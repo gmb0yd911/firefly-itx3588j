@@ -1,0 +1,13 @@
+declare -i UBOOT_NUM_TARGETS=1
+declare UBOOT_BIN_DIR="/usr/lib/linux-u-boot-vendor-firefly-itx-3588j"
+declare UBOOT_VERSION="2017.09"
+declare UBOOT_ARTIFACT_VERSION="2017.09-S39cd-P5e77-H1795-V4ebd-B56a7-R448a"
+declare UBOOT_GIT_REVISION="39cd993e5d6296635438e84f4576b3a9bf76f86e"
+declare UBOOT_GIT_SOURCE="https://github.com/radxa/u-boot.git"
+declare UBOOT_GIT_BRANCH="branch:next-dev-v2024.10"
+declare UBOOT_GIT_PATCHDIR="legacy/u-boot-radxa-rk35xx legacy/u-boot-radxa-rk35xx-v2024.10"
+declare UBOOT_PARTITION_TYPE="gpt"
+declare UBOOT_KERNEL_DTB="rockchip/rk3588-firefly-itx-3588j.dtb"
+declare UBOOT_KERNEL_SERIALCON="ttyFIQ0"
+declare UBOOT_EXTLINUX_PREFER="no"
+declare UBOOT_EXTLINUX_CMDLINE=""

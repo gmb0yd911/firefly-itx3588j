@@ -234,6 +234,12 @@ if [[ -f "${MNT_DIR}/usr/share/omarchy/shell/plugins/menu/Menu.qml" ]]; then
   sed -i 's/property color scrim: Color.menu.scrim/property color scrim: "transparent"/' "${MNT_DIR}/usr/share/omarchy/shell/plugins/menu/Menu.qml"
 fi
 
+# Pin QtQuick imports to 6.0 across all shell QML files to avoid Qt 6.12+ Color singleton conflict
+if [[ -d "${MNT_DIR}/usr/share/omarchy/shell" ]]; then
+  echo "Pinning QtQuick imports to 6.0 to avoid Qt 6.12+ Color singleton shadowing..."
+  find "${MNT_DIR}/usr/share/omarchy/shell" -name '*.qml' -exec sed -i 's/^import QtQuick$/import QtQuick 6.0/' {} +
+fi
+
 # Arm Omarchy First-Boot Setup Wizard (omarchy-provision-owner)
 echo "Arming Omarchy First-Boot Setup Wizard..."
 install -Dm644 "${MNT_DIR}/usr/share/omarchy/install/provisioning/omarchy-provision-owner.service" \

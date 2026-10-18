@@ -231,20 +231,15 @@ if [[ -d "${MNT_DIR}/usr/share/omarchy/shell" ]]; then
   find "${MNT_DIR}/usr/share/omarchy/shell" -name '*.qml' -exec sed -i 's/^import QtQuick$/import QtQuick 6.0/' {} +
 fi
 
-# Performance and input tuning for Firefly (RK3588 with software llvmpipe on vendor 6.1 kernel)
+# Performance and input tuning for Firefly (RK3588 with Mali-G610 Panthor GPU acceleration)
 if [[ -f "${MNT_DIR}/usr/share/omarchy/default/hypr/platform/firefly.lua" ]]; then
-  echo "Tuning Firefly Hyprland platform profile for low-latency software compositing..."
+  echo "Tuning Firefly Hyprland platform profile..."
   cat <<'EOF' > "${MNT_DIR}/usr/share/omarchy/default/hypr/platform/firefly.lua"
 -- Firefly ITX-3588J (Rockchip RK3588) defaults.
---
--- With Linux 6.1 vendor BSP, Wayland rendering uses Mesa llvmpipe. Disable
--- animations and set comfortable input repeat thresholds to keep input
--- processing immediate and responsive on high-resolution displays.
+-- Native hardware acceleration enabled via Panthor + Mesa Panfrost (Mali-G610 MC4).
+-- Comfortable keyboard repeat thresholds and responsive pointer profile.
 
 hl.config({
-  animations = {
-    enabled = false,
-  },
   cursor = {
     no_hardware_cursors = false,
   },
@@ -272,6 +267,66 @@ hl.config({
 })
 EOF
 fi
+
+# Prevent unrecoverable DPMS blanking on desktop SBC with external HDMI/DP monitors
+if [[ -f "${MNT_DIR}/usr/share/omarchy/bin/omarchy-brightness-display" ]]; then
+  echo "Patching omarchy-brightness-display to protect external displays from DPMS disconnects..."
+  python3 -c "
+import re
+path = '${MNT_DIR}/usr/share/omarchy/bin/omarchy-brightness-display'
+with open(path, 'r') as f:
+    text = f.read()
+repl = '''if [[ \$step == \"off\" ]]; then
+  # On desktop SBC hardware with external displays, disable DPMS power-off to avoid
+  # dropping HDMI/DP VOP2 pipeline links and unrecoverable sleep states.
+  if omarchy-hw-laptop; then
+    hyprctl dispatch \'hl.dsp.dpms({ action = \"disable\" })\' >/dev/null 2>&1
+  fi
+  exit 0'''
+text = re.sub(r'if \[\[ \\\$step == \"off\" \]\]; then.*?exit 0', repl, text, flags=re.DOTALL)
+with open(path, 'w') as f:
+    f.write(text)
+"
+fi
+
+# Suppress /sys/class/dmi/id/chassis_type error on Device Tree ARM boards
+if [[ -f "${MNT_DIR}/usr/share/omarchy/bin/omarchy-hw-laptop" ]]; then
+  echo "Patching omarchy-hw-laptop for non-DMI Device Tree systems..."
+  cat <<'EOF' > "${MNT_DIR}/usr/share/omarchy/bin/omarchy-hw-laptop"
+#!/bin/bash
+
+# omarchy:summary=Returns true when running on a laptop (has a lid or laptop chassis).
+
+# A lid switch is the definitive signal for clamshell-capable hardware.
+for state in /proc/acpi/button/lid/*/state; do
+  [[ -e $state ]] && exit 0
+done
+
+# Fall back to the DMI chassis type for laptops that don't expose an ACPI lid
+# button. 8=Portable 9=Laptop 10=Notebook 14=Sub Notebook 30=Tablet
+# 31=Convertible 32=Detachable.
+if [[ -f /sys/class/dmi/id/chassis_type ]]; then
+  case $(< /sys/class/dmi/id/chassis_type 2>/dev/null) in
+  8 | 9 | 10 | 14 | 30 | 31 | 32) exit 0 ;;
+  esac
+fi
+
+exit 1
+EOF
+  chmod 755 "${MNT_DIR}/usr/share/omarchy/bin/omarchy-hw-laptop"
+fi
+
+# Configure relaxed desktop idle timeouts (15m screensaver, 30m lock)
+mkdir -p "${MNT_DIR}/etc/skel/.config/omarchy"
+cat <<'EOF' > "${MNT_DIR}/etc/skel/.config/omarchy/shell.json"
+{
+  "version": 1,
+  "idle": {
+    "screensaver": 900,
+    "lock": 1800
+  }
+}
+EOF
 
 # Arm Omarchy First-Boot Setup Wizard (omarchy-provision-owner)
 echo "Arming Omarchy First-Boot Setup Wizard..."

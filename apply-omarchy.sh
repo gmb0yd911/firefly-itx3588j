@@ -240,6 +240,48 @@ if [[ -d "${MNT_DIR}/usr/share/omarchy/shell" ]]; then
   find "${MNT_DIR}/usr/share/omarchy/shell" -name '*.qml' -exec sed -i 's/^import QtQuick$/import QtQuick 6.0/' {} +
 fi
 
+# Performance and input tuning for Firefly (RK3588 with software llvmpipe on vendor 6.1 kernel)
+if [[ -f "${MNT_DIR}/usr/share/omarchy/default/hypr/platform/firefly.lua" ]]; then
+  echo "Tuning Firefly Hyprland platform profile for low-latency software compositing..."
+  cat <<'EOF' > "${MNT_DIR}/usr/share/omarchy/default/hypr/platform/firefly.lua"
+-- Firefly ITX-3588J (Rockchip RK3588) defaults.
+--
+-- With Linux 6.1 vendor BSP, Wayland rendering uses Mesa llvmpipe. Disable
+-- animations and set comfortable input repeat thresholds to keep input
+-- processing immediate and responsive on high-resolution displays.
+
+hl.config({
+  animations = {
+    enabled = false,
+  },
+  cursor = {
+    no_hardware_cursors = false,
+  },
+  input = {
+    repeat_delay = 600,
+    repeat_rate = 25,
+    sensitivity = 0.5,
+    accel_profile = "adaptive",
+  },
+})
+EOF
+fi
+
+if [[ -f "${MNT_DIR}/etc/skel/.config/hypr/input.lua" ]]; then
+  cat <<'EOF' > "${MNT_DIR}/etc/skel/.config/hypr/input.lua"
+-- Keep only your personal input overrides here.
+
+hl.config({
+  input = {
+    repeat_delay = 600,
+    repeat_rate = 25,
+    sensitivity = 0.5,
+    accel_profile = "adaptive",
+  },
+})
+EOF
+fi
+
 # Arm Omarchy First-Boot Setup Wizard (omarchy-provision-owner)
 echo "Arming Omarchy First-Boot Setup Wizard..."
 install -Dm644 "${MNT_DIR}/usr/share/omarchy/install/provisioning/omarchy-provision-owner.service" \

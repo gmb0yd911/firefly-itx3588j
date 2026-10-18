@@ -5,10 +5,8 @@
 - **Display Subsystem**: In Linux 6.1 BSP, display scanout is handled by the Rockchip VOP2 DRM driver (`rockchip-drm` on `/dev/dri/card1`), driving the dual HDMI 2.1 and DP Type-C outputs.
 - **GPU Driver Status**:
   - The onboard GPU is an ARM Mali-G610 MP4 (Valhall v10 with Command Stream Frontend / CSF).
-  - On the **Linux 6.1 BSP kernel**, the kernel includes ARM's out-of-tree `mali_kbase.ko` (`/dev/mali0`). Standard upstream Mesa cannot communicate with `mali_kbase.ko` (upstream Panthor was only mainlined in Linux 6.10+).
-  - Without an explicit driver override, upstream Mesa attempts hardware DRI2 on `rockchip-drm`, fails, falls back to Zink, and causes Wayland compositors (like Hyprland/Aquamarine) to crash with `EGL_NOT_INITIALIZED: DRI2: failed to create screen`.
-  - **Resolution on 6.1 BSP**: Set `MESA_LOADER_DRIVER_OVERRIDE=kms_swrast`, `QT_QUICK_BACKEND=software`, and `OMARCHY_PATH=/usr/share/omarchy` in `/etc/environment`. Mesa pairs Rockchip VOP2 KMS with the multithreaded `llvmpipe` software rasterizer for the Wayland compositor, and Qt Quick 2D software rendering prevents LLVMpipe multi-threaded tile SEGV crashes in the Quickshell desktop shell.
-  - **Full Hardware Acceleration (Panthor)**: Native kernel-level hardware acceleration with open-source Mesa Panfrost/PanVK requires a Linux 6.10+ mainline or backported Panthor kernel.
+  - The Linux 6.1 BSP kernel includes the backported open-source **`panthor.ko`** driver (`/dev/dri/card2` / `/dev/dri/renderD130`) and CSF firmware (`arm/mali/arch10.8/mali_csffw.bin`).
+  - **Full Hardware Acceleration (Panthor)**: Enabled by setting `overlays=panthor-gpu` in `/boot/armbianEnv.txt` and updating the Device Tree to flip `gpu` (`mali_kbase`) to `disabled` and `gpu_panthor` to `okay` with `mali-supply = <&vdd_gpu_s0>`. Upstream Mesa automatically binds via `panthor_dri.so` / `vulkan-panfrost` as **Mali-G610 MC4 (Panfrost)**, delivering native hardware OpenGL ES 3.1 and Vulkan acceleration with zero CPU rasterization overhead.
 
 ## Display Configuration
 

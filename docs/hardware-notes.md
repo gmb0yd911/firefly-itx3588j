@@ -1,13 +1,14 @@
 # Firefly ITX-3588J Hardware Notes
 
-## GPU Acceleration: ARM Mali-G610 MP4
+## GPU & Display Architecture
 
-- **Driver Architecture**: In Linux 6.1 BSP, the display subsystem is handled by Rockchip VOP2 DRM (`rockchip-drm`), and 3D graphics are driven by ARM Mali CSF (Command Stream Frontend) kernel base (`mali_kbase.ko`) combined with Panfrost/Mesa.
-- **Render Nodes**:
-  - `/dev/dri/card0` / `/dev/dri/renderD128`: Display controller & hardware render node
-  - `/dev/dri/card1` / `/dev/dri/renderD129`: Auxiliary render node
-- **Wayland / Hyprland Compositing**:
-  Unlike lower-tier SBC GPUs (such as VideoCore on Raspberry Pi), the Mali-G610 MP4 has 4 shader cores providing ~450 GFLOPS of performance. All Omarchy animations, rounded borders, and dynamic UI effects run at full 60 FPS / 120 FPS without dropped frames.
+- **Display Subsystem**: In Linux 6.1 BSP, display scanout is handled by the Rockchip VOP2 DRM driver (`rockchip-drm` on `/dev/dri/card1`), driving the dual HDMI 2.1 and DP Type-C outputs.
+- **GPU Driver Status**:
+  - The onboard GPU is an ARM Mali-G610 MP4 (Valhall v10 with Command Stream Frontend / CSF).
+  - On the **Linux 6.1 BSP kernel**, the kernel includes ARM's out-of-tree `mali_kbase.ko` (`/dev/mali0`). Standard upstream Mesa cannot communicate with `mali_kbase.ko` (upstream Panthor was only mainlined in Linux 6.10+).
+  - Without an explicit driver override, upstream Mesa attempts hardware DRI2 on `rockchip-drm`, fails, falls back to Zink, and causes Wayland compositors (like Hyprland/Aquamarine) to crash with `EGL_NOT_INITIALIZED: DRI2: failed to create screen`.
+  - **Resolution on 6.1 BSP**: Set `MESA_LOADER_DRIVER_OVERRIDE=kms_swrast`, `QT_QUICK_BACKEND=software`, and `OMARCHY_PATH=/usr/share/omarchy` in `/etc/environment`. Mesa pairs Rockchip VOP2 KMS with the multithreaded `llvmpipe` software rasterizer for the Wayland compositor, and Qt Quick 2D software rendering prevents LLVMpipe multi-threaded tile SEGV crashes in the Quickshell desktop shell.
+  - **Full Hardware Acceleration (Panthor)**: Native kernel-level hardware acceleration with open-source Mesa Panfrost/PanVK requires a Linux 6.10+ mainline or backported Panthor kernel.
 
 ## Display Configuration
 

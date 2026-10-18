@@ -11,3 +11,4 @@ cache/firefly-bsp/boot/uInitrd*
 cache/firefly-bsp/boot/System.map*
 cache/firefly-bsp/boot/Image
 cache/firefly-bsp/firmware/
+cache/edk2/*.img

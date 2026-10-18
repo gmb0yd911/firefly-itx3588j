@@ -179,7 +179,7 @@ title      Omarchy Linux ARM (Firefly ITX-3588J UEFI)
 linux      /${KERNEL_NAME}
 initrd     /${INITRD_NAME}
 devicetree /dtb/rockchip/rk3588-firefly-itx-3588j.dtb
-options    root=UUID=${ROOT_UUID} rootflags=subvol=@,compress=zstd:3 rw quiet loglevel=3 cma=256M splash
+options    root=UUID=${ROOT_UUID} rootflags=subvol=@,compress=zstd:3 rw quiet loglevel=3 cma=256M splash drm.edid_firmware=HDMI-A-1:edid/dell_p2720dc.bin video=HDMI-A-1:2560x1440@60
 EOF
 
 # Configure /etc/fstab

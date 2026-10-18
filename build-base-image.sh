@@ -179,7 +179,7 @@ cat <<EOF > "${TARGET_DIR}/boot/armbianEnv.txt"
 verbosity=1
 bootlogo=false
 console=both
-extraargs=cma=256M
+extraargs=cma=256M drm.edid_firmware=HDMI-A-1:edid/dell_p2720dc.bin video=HDMI-A-1:2560x1440@60
 overlay_prefix=rockchip-rk3588
 fdtfile=rockchip/rk3588-firefly-itx-3588j.dtb
 rootdev=UUID=${ROOT_UUID}

@@ -201,8 +201,37 @@ fi
 if ! grep -q "LP_NUM_THREADS" "${MNT_DIR}/etc/environment" 2>/dev/null; then
   echo "LP_NUM_THREADS=1" >> "${MNT_DIR}/etc/environment"
 fi
+if ! grep -q "QT_QUICK_BACKEND" "${MNT_DIR}/etc/environment" 2>/dev/null; then
+  echo "QT_QUICK_BACKEND=software" >> "${MNT_DIR}/etc/environment"
+fi
 if ! grep -q "OMARCHY_PATH" "${MNT_DIR}/etc/environment" 2>/dev/null; then
   echo "OMARCHY_PATH=/usr/share/omarchy" >> "${MNT_DIR}/etc/environment"
+fi
+
+# Install EDID firmware override for Dell P2720DC QHD monitor
+if [[ -f "${WORK_DIR}/config/edid/dell_p2720dc.bin" ]]; then
+  echo "Installing EDID firmware for Dell P2720DC..."
+  install -Dm644 "${WORK_DIR}/config/edid/dell_p2720dc.bin" "${MNT_DIR}/usr/lib/firmware/edid/dell_p2720dc.bin"
+fi
+
+# Default monitor scale to 1 (prevent 2x scaling down on 1080p/1440p displays)
+if [[ -f "${MNT_DIR}/usr/share/omarchy/config/hypr/monitors.lua" ]]; then
+  sed -i 's/local omarchy_monitor_scale = "auto"/local omarchy_monitor_scale = 1/' "${MNT_DIR}/usr/share/omarchy/config/hypr/monitors.lua"
+  sed -i 's/local omarchy_gdk_scale = 2/local omarchy_gdk_scale = 1/' "${MNT_DIR}/usr/share/omarchy/config/hypr/monitors.lua"
+fi
+if [[ -f "${MNT_DIR}/etc/skel/.config/hypr/monitors.lua" ]]; then
+  sed -i 's/local omarchy_monitor_scale = "auto"/local omarchy_monitor_scale = 1/' "${MNT_DIR}/etc/skel/.config/hypr/monitors.lua"
+  sed -i 's/local omarchy_gdk_scale = 2/local omarchy_gdk_scale = 1/' "${MNT_DIR}/etc/skel/.config/hypr/monitors.lua"
+fi
+
+# Transparent scrims for software backend (prevents Wayland layer-surface opaque black overlay)
+if [[ -f "${MNT_DIR}/usr/share/omarchy/shell/Commons/Color.qml" ]]; then
+  sed -i 's/property color scrim: root.composed("menu.scrim", "menu.scrim-alpha", root.background, 0.5)/property color scrim: "transparent"/' "${MNT_DIR}/usr/share/omarchy/shell/Commons/Color.qml"
+  sed -i 's/property color scrim: root.composed("polkit.scrim", "polkit.scrim-alpha", root.background, 0.5)/property color scrim: "transparent"/' "${MNT_DIR}/usr/share/omarchy/shell/Commons/Color.qml"
+  sed -i 's/property color scrim: root.composed("image-picker.scrim", "image-picker.scrim-alpha", root.background, 0.5)/property color scrim: "transparent"/' "${MNT_DIR}/usr/share/omarchy/shell/Commons/Color.qml"
+fi
+if [[ -f "${MNT_DIR}/usr/share/omarchy/shell/plugins/menu/Menu.qml" ]]; then
+  sed -i 's/property color scrim: Color.menu.scrim/property color scrim: "transparent"/' "${MNT_DIR}/usr/share/omarchy/shell/plugins/menu/Menu.qml"
 fi
 
 # Arm Omarchy First-Boot Setup Wizard (omarchy-provision-owner)

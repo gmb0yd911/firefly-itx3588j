@@ -181,6 +181,7 @@ bootlogo=false
 console=both
 extraargs=cma=256M drm.edid_firmware=HDMI-A-1:edid/dell_p2720dc.bin video=HDMI-A-1:2560x1440@60
 overlay_prefix=rockchip-rk3588
+overlays=panthor-gpu
 fdtfile=rockchip/rk3588-firefly-itx-3588j.dtb
 rootdev=UUID=${ROOT_UUID}
 rootfstype=btrfs

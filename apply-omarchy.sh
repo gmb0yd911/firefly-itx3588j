@@ -195,15 +195,6 @@ EOF
 mkdir -p "${MNT_DIR}/usr/share/wayland-sessions"
 ln -sf /usr/local/share/wayland-sessions/omarchy.desktop "${MNT_DIR}/usr/share/wayland-sessions/omarchy.desktop"
 
-if ! grep -q "MESA_LOADER_DRIVER_OVERRIDE" "${MNT_DIR}/etc/environment" 2>/dev/null; then
-  echo "MESA_LOADER_DRIVER_OVERRIDE=kms_swrast" >> "${MNT_DIR}/etc/environment"
-fi
-if ! grep -q "LP_NUM_THREADS" "${MNT_DIR}/etc/environment" 2>/dev/null; then
-  echo "LP_NUM_THREADS=1" >> "${MNT_DIR}/etc/environment"
-fi
-if ! grep -q "QT_QUICK_BACKEND" "${MNT_DIR}/etc/environment" 2>/dev/null; then
-  echo "QT_QUICK_BACKEND=software" >> "${MNT_DIR}/etc/environment"
-fi
 if ! grep -q "OMARCHY_PATH" "${MNT_DIR}/etc/environment" 2>/dev/null; then
   echo "OMARCHY_PATH=/usr/share/omarchy" >> "${MNT_DIR}/etc/environment"
 fi

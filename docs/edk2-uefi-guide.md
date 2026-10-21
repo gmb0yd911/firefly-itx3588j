@@ -97,3 +97,40 @@ You can flash the provisioned UEFI image to your SATA SSD (`/dev/sda`), NVMe SSD
 ```
 
 EDK2 will detect the drive's EFI System Partition and boot directly into Omarchy!
+
+---
+
+## 7. Vendor 6.1 native HDMI handoff
+
+On EDK2 v1.1 with the 6.1.115 vendor kernel, the firmware-provided device
+tree has incompatible HDMI PHY clock bindings. Using the BSP's complete
+board tree repairs those bindings, but HDMI initialization can still panic
+when taking over a display initialized by UEFI.
+
+The hardware-validated workaround uses the BSP tree plus explicit VOP clock
+holds, retaining native Rockchip DRM and Panthor acceleration:
+
+```bash
+./scripts/build-uefi-clock-hold-dtb.sh \
+  cache/firefly-bsp/boot/dtb-6.1.115-vendor-rk35xx/rockchip/rk3588-firefly-itx-3588j.dtb \
+  /tmp/itx-3588j-uefi-native-hdmi.dtb
+```
+
+The generator only creates a new DTB. Install it on the target's EFI System
+Partition and reference it in the systemd-boot entry with:
+
+```text
+devicetree /dtb/itx-3588j-uefi-native-hdmi.dtb
+```
+
+Keep the existing kernel, initrd and root filesystem arguments. Keep a
+separate known-working SSH fallback entry. In firmware setup, save
+**Display → Force Output → Disabled**. On eMMC-backed v1.1 firmware, Linux
+runtime EFI variable writes may disappear at reboot; configure the normal
+boot entry in `/boot/loader/loader.conf`.
+
+This configuration was validated with HDMI connected throughout boot and
+the Omarchy desktop visible. Seven VOP clocks remain enabled; suspend/resume
+and the other display ports have not been validated. See
+[the investigation record](uefi-hdmi-investigation.md) for the exact deployed
+configuration, evidence and recovery paths.

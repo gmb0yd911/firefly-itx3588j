@@ -95,3 +95,10 @@ sudo ./scripts/umount-img.sh
 | Root | `root` | `root` | Full |
 
 *(On first graphical boot, the Omarchy Setup Wizard will prompt you to create your own permanent user).*
+
+---
+
+## Related
+
+- [fedora-firefly-uefi](https://github.com/gmb0yd911/fedora-firefly-uefi): Fedora Cinnamon with a Btrfs root on the same board, booting through
+  EDK2 UEFI with Fedora's mainline kernel and device tree.
